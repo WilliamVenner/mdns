@@ -23,13 +23,10 @@
 //! }
 //! ```
 
-use crate::{mDNSListener, Error, Response};
-
-use std::time::Duration;
-
 use crate::mdns::{mDNSSender, mdns_interface};
+use crate::{mDNSListener, Error, Response};
 use futures_core::Stream;
-use futures_util::{future::ready, stream::select, StreamExt};
+use futures_util::{future::ready, StreamExt};
 use std::net::Ipv4Addr;
 
 /// A multicast DNS discovery request.
@@ -45,25 +42,18 @@ pub struct Discovery {
 
     /// Whether we should ignore empty responses.
     ignore_empty: bool,
-
-    /// The interval we should send mDNS queries.
-    send_request_interval: Duration,
 }
 
 /// Gets an iterator over all responses for a given service on all interfaces.
-pub fn all<S>(service_name: S, mdns_query_interval: Duration) -> Result<Discovery, Error>
+pub fn all<S>(service_name: S) -> Result<Discovery, Error>
 where
     S: AsRef<str>,
 {
-    interface(service_name, mdns_query_interval, Ipv4Addr::new(0, 0, 0, 0))
+    interface(service_name, Ipv4Addr::new(0, 0, 0, 0))
 }
 
 /// Gets an iterator over all responses for a given service on a given interface.
-pub fn interface<S>(
-    service_name: S,
-    mdns_query_interval: Duration,
-    interface_addr: Ipv4Addr,
-) -> Result<Discovery, Error>
+pub fn interface<S>(service_name: S, interface_addr: Ipv4Addr) -> Result<Discovery, Error>
 where
     S: AsRef<str>,
 {
@@ -75,7 +65,6 @@ where
         mdns_sender,
         mdns_listener,
         ignore_empty: true,
-        send_request_interval: mdns_query_interval,
     })
 }
 
@@ -88,31 +77,22 @@ impl Discovery {
         self
     }
 
-    pub fn listen(self) -> impl Stream<Item = Result<Response, Error>> {
-        let ignore_empty = self.ignore_empty;
-        let service_name = self.service_name;
-        let response_stream = self.mdns_listener.listen();
-        let sender = self.mdns_sender.clone();
+    pub fn listen(
+        self,
+    ) -> (
+        DiscoveryScanner,
+        impl Stream<Item = Result<Response, Error>>,
+    ) {
+        let Discovery {
+            service_name,
+            mdns_sender,
+            mdns_listener,
+            ignore_empty,
+        } = self;
 
-        let response_stream = response_stream.map(StreamResult::Response);
-        let interval_stream = crate::runtime::create_interval_stream(self.send_request_interval)
-            .map(move |_| {
-                let mut sender = sender.clone();
-                crate::runtime::spawn(async move {
-                    let _ = sender.send_request().await;
-                });
-                StreamResult::Interval
-            });
-
-        let stream = select(response_stream, interval_stream);
-        stream
-            .filter_map(|stream_result| async {
-                match stream_result {
-                    StreamResult::Interval => None,
-                    StreamResult::Response(res) => Some(res),
-                }
-            })
-            .filter(move |res| {
+        (
+            DiscoveryScanner(mdns_sender),
+            mdns_listener.listen().filter(move |res| {
                 ready(match res {
                     Ok(response) => {
                         (!response.is_empty() || !ignore_empty)
@@ -123,11 +103,15 @@ impl Discovery {
                     }
                     Err(_) => true,
                 })
-            })
+            }),
+        )
     }
 }
 
-pub enum StreamResult {
-    Interval,
-    Response(Result<crate::Response, crate::Error>),
+#[derive(Clone)]
+pub struct DiscoveryScanner(mDNSSender);
+impl DiscoveryScanner {
+    pub async fn scan(&mut self) -> Result<(), Error> {
+        self.0.send_request().await
+    }
 }

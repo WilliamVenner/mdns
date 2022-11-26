@@ -1,16 +1,10 @@
 use crate::Error;
-
 use async_std::future::TimeoutError;
-use async_std::stream::StreamExt;
-use futures_core::{Future, Stream};
+use futures_core::Future;
 use std::{sync::Arc, time::Duration};
 
 pub use async_std::net::UdpSocket as AsyncUdpSocket;
 pub use async_std::task::spawn;
-
-pub fn create_interval_stream(request_interval: Duration) -> impl Stream<Item = ()> {
-    async_std::stream::once(()).chain(async_std::stream::interval(request_interval))
-}
 
 pub fn make_async_socket(socket: std::net::UdpSocket) -> Result<Arc<AsyncUdpSocket>, Error> {
     Ok(Arc::new(AsyncUdpSocket::from(socket)))

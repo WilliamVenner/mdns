@@ -34,7 +34,7 @@ where
     S: AsRef<str>,
 {
     // by setting the query interval higher than the timeout we ensure we only make one query
-    let stream = crate::discover::all(service_name, timeout * 2)?.listen();
+    let (mut scanner, stream) = crate::discover::all(service_name)?.listen();
     pin_mut!(stream);
 
     let process = async {
@@ -47,6 +47,8 @@ where
 
         None
     };
+
+    scanner.scan().await?;
 
     runtime::timeout(timeout, process)
         .map_err(|e| e.into())
@@ -63,7 +65,7 @@ where
     S: AsRef<str>,
 {
     // by setting the query interval higher than the timeout we ensure we only make one query
-    let stream = crate::discover::all(service_name, timeout * 2)?.listen();
+    let (mut scanner, stream) = crate::discover::all(service_name)?.listen();
     pin_mut!(stream);
 
     let mut found = Vec::new();
@@ -82,6 +84,8 @@ where
             }
         }
     };
+
+    scanner.scan().await?;
 
     match runtime::timeout(timeout, process).await {
         Ok(()) => Ok(found),
