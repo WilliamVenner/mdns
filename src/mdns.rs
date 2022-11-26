@@ -100,9 +100,8 @@ impl mDNSListener {
                 let (count, addr) = self.recv.recv_from(&mut self.recv_buffer).await?;
 
                 if count > 0 {
-                    match dns_parser::Packet::parse(&self.recv_buffer[..count]) {
-                        Ok(raw_packet) => yield Response::from_packet(&raw_packet, addr),
-                        Err(e) => log::warn!("{}, {:?}", e, &self.recv_buffer[..count]),
+                    if let Ok(raw_packet) = dns_parser::Packet::parse(&self.recv_buffer[..count]) {
+                        yield Response::from_packet(&raw_packet, addr);
                     }
                 }
             }
