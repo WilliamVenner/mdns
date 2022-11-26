@@ -16,7 +16,7 @@ pub struct Response {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Record {
     pub name: String,
-    #[serde(with = "serde_helpers::dns_class")]
+    #[cfg_attr(feature = "with-serde", serde(with = "serde_helpers::dns_class"))]
     pub class: dns_parser::Class,
     pub ttl: u32,
     pub kind: RecordKind,
