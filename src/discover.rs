@@ -49,7 +49,15 @@ pub fn all<S>(service_name: S) -> Result<Discovery, Error>
 where
     S: AsRef<str>,
 {
-    interface(service_name, Ipv4Addr::new(0, 0, 0, 0))
+    let service_name = service_name.as_ref().to_string();
+    let (mdns_listener, mdns_sender) = mdns_interface(service_name.clone(), None)?;
+
+    Ok(Discovery {
+        service_name,
+        mdns_sender,
+        mdns_listener,
+        ignore_empty: true,
+    })
 }
 
 /// Gets an iterator over all responses for a given service on a given interface.
@@ -58,7 +66,7 @@ where
     S: AsRef<str>,
 {
     let service_name = service_name.as_ref().to_string();
-    let (mdns_listener, mdns_sender) = mdns_interface(service_name.clone(), interface_addr)?;
+    let (mdns_listener, mdns_sender) = mdns_interface(service_name.clone(), Some(interface_addr))?;
 
     Ok(Discovery {
         service_name,

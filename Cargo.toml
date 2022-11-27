@@ -26,6 +26,7 @@ with-serde = ["serde"]
 
 [dependencies]
 dns-parser = "0.8"
+if-addrs = "0.7"
 net2 = "0.2"
 err-derive = "0.2"
 futures-core = "0.3"

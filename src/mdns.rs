@@ -1,6 +1,9 @@
 use crate::{runtime::AsyncUdpSocket, Error, Response};
 
-use std::{io, net::Ipv4Addr};
+use std::{
+    io,
+    net::{IpAddr, Ipv4Addr},
+};
 
 use async_stream::try_stream;
 use futures_core::Stream;
@@ -16,13 +19,39 @@ const MULTICAST_PORT: u16 = 5353;
 
 pub fn mdns_interface(
     service_name: String,
-    interface_addr: Ipv4Addr,
+    interface: Option<Ipv4Addr>,
 ) -> Result<(mDNSListener, mDNSSender), Error> {
     let socket = create_socket()?;
 
     socket.set_multicast_loop_v4(false)?;
     socket.set_nonblocking(true)?; // explicitly set nonblocking for wider compatability
-    socket.join_multicast_v4(&MULTICAST_ADDR, &interface_addr)?;
+
+    if let Some(interface) = interface {
+        socket.join_multicast_v4(&MULTICAST_ADDR, &interface)?;
+    } else {
+        // Join multicast on all interfaces
+        let mut did_join = false;
+        if let Ok(ifaces) = if_addrs::get_if_addrs() {
+            for iface in ifaces
+                .into_iter()
+                .filter(|iface| !iface.is_loopback())
+                .filter_map(|iface| {
+                    if let IpAddr::V4(iface) = iface.addr.ip() {
+                        Some(iface)
+                    } else {
+                        None
+                    }
+                })
+            {
+                if socket.join_multicast_v4(&MULTICAST_ADDR, &iface).is_ok() {
+                    did_join = true;
+                }
+            }
+        }
+        if !did_join {
+            socket.join_multicast_v4(&MULTICAST_ADDR, &ADDR_ANY)?;
+        }
+    }
 
     let socket = crate::runtime::make_async_socket(socket)?;
 
